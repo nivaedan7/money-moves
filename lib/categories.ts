@@ -1,0 +1,25 @@
+export const CATEGORIES = [
+  "Groceries",
+  "Eating Out",
+  "Tolls",
+  "Home Utilities",
+  "Rent / Mortgage",
+  "Insurance",
+  "Subscriptions",
+  "Giving",
+  "Meera Childcare",
+  "Meera Activities",
+  "Health",
+  "Sports & Fitness",
+  "Shopping",
+  "Fuel & Car",
+  "Work Expenses",
+  "Investment Property Costs",
+  "Travel",
+  "Big One-Offs",
+  "Income",
+  "Ignore",
+  "NEEDS_REVIEW",
+] as const;
+
+export type Category = (typeof CATEGORIES)[number];
