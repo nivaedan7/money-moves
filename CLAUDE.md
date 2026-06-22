@@ -1,36 +1,41 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code working in this repo. **Read `HANDOFF.md` first — it is the full engineering handoff (schema, data state, automation, tech debt, roadmap).**
 
 ## Project
 
-**moneymoves** is a personal finance tracker built with Next.js (App Router) and TypeScript.
+**MoneyMoves ($MM)** — household finance app for Nivae & Diya. Next.js 14 (App Router) + TypeScript + Supabase. Low-friction monthly workflow: import statements → auto-categorise → review → see spend. Behavioural focus: four categories matter most (Groceries, Eating Out, Tolls, Home Utilities).
+
+The user is **Nivae** (not "Naveen"). Communicate directly, no hedging, surface tradeoffs.
 
 ## Commands
 
 ```bash
-npm run dev       # start dev server at http://localhost:3000
-npm run build     # production build
-npm run start     # start production server
-npm run lint      # run ESLint
-npx tsc --noEmit  # type-check without emitting
-```
-
-To run a single test file (once a test framework is added):
-```bash
-npx jest path/to/file.test.ts
-# or with vitest:
-npx vitest run path/to/file.test.ts
+npm run dev        # dev server at http://localhost:3000
+npm run build      # production build (run before deploy)
+npm run lint
+npx tsc --noEmit   # type-check
 ```
 
 ## Architecture
 
-Next.js 14+ App Router project with the `app/` directory convention:
+App Router. Client components query Supabase directly via the publishable key (RLS-gated); aggregation is client-side. No API routes / server fetches yet.
 
-- `app/` — routes, layouts, and pages using Server Components by default
-- `app/api/` — Route Handlers (API endpoints)
-- `components/` — shared React components (client components marked with `"use client"`)
-- `lib/` — utility functions, data fetching helpers, and business logic
-- `types/` — shared TypeScript type definitions
+- `app/` — routes: `/` (Dashboard), `/salary`, `/outlook`, `/networth`, `/import`, `/review`. `layout.tsx` wraps all in `components/AuthGate.tsx` (auth gate + nav).
+- `components/` — one client component per screen.
+- `lib/` — `supabaseClient.ts` (client + types, public URL/key fallback baked in), `categories.ts` (the 21 labels), `rules.ts` (rule engine + `categoriseWith`), `csv.ts` (CBA/ING parser).
 
-Data flows: Server Components fetch and pass data down; client components handle interactivity. Keep data fetching in Server Components or Route Handlers; avoid redundant client-side fetches when server-side is sufficient.
+## Supabase
+
+Project ref **`weoaakhlcllcjfzupjsj`**. Tables: `transactions` (signed `amount`, `dedup_key` trigger + partial unique index), `import_batches`, `budgets`, `annual_commitments`, `net_worth_snapshots` (jsonb), `bank_accounts`, `merchant_rules` (DB-backed rules, read before static), `goals`. RLS ON — `SELECT`/`INSERT`/`UPDATE` for the `authenticated` role. For migrations use the Supabase CLI (`supabase link --project-ref weoaakhlcllcjfzupjsj`) or MCP; never put the service-role key in client code.
+
+## Conventions
+
+- Amounts are signed: **negative = money out**, positive = in. Category `Ignore` (internal transfers, card payments, reversed/failed debits, intl fees) and `Income` are excluded from spend.
+- Categorisation order: DB `merchant_rules` (priority asc) → static `lib/rules.ts` → `NEEDS_REVIEW`. Ignore rules fire first.
+- Database is append-only — never destroy historical data; prefer additive migrations and reconcile against source statements.
+- Known debt: legacy category labels (`Eating out`) differ from canonical (`Eating Out`) — see HANDOFF.md §7/§10.
+
+## Needs the user's approval
+
+External accounts, credentials, money movement, publishing/deploying, anything irreversible.
