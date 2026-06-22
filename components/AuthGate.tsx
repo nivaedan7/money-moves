@@ -31,6 +31,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
           <a href="/bills">Bills</a>
           <a href="/import">Import</a>
           <a href="/review">Review</a>
+          <a href="/settings">Settings</a>
           <button className="link" style={{ marginLeft: "auto", color: "#cdd8e2" }} onClick={() => supabase.auth.signOut()}>
             Sign out
           </button>
