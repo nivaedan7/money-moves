@@ -19,6 +19,7 @@ export type Transaction = {
   confidence: number | null;
   source: "cba" | "ing" | "bom";
   is_annual_commitment: boolean;
+  is_one_off: boolean;
   notes: string | null;
 };
 

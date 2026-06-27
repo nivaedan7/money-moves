@@ -383,9 +383,10 @@ export default function BillsAndCommitments() {
       </div>
 
       <div className="foot">
-        Subscriptions are detected from transactions categorised as Subscriptions in the last 3 months.
-        Commitments are manually maintained — add, mark paid, and delete as bills land.
-        The heavy-months grid projects each commitment's next occurrence forward so you can see cashflow pressure ahead.
+        Subscriptions are detected automatically from transactions categorised as Subscriptions in the last three
+        months. Annual and irregular commitments are manually maintained — add entries as they arise, mark them paid
+        when they land, and delete them if they no longer apply. The cashflow calendar projects each commitment's next
+        due date forward so you can anticipate heavy months before they hit.
       </div>
     </div>
   );

@@ -28,6 +28,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
           <a href="/salary">Salary</a>
           <a href="/outlook">Outlook</a>
           <a href="/networth">Net Worth</a>
+          <a href="/meera">Meera</a>
           <a href="/bills">Bills</a>
           <a href="/import">Import</a>
           <a href="/review">Review</a>

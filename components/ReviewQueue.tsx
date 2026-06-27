@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { CATEGORIES } from "@/lib/categories";
+import { writeMonthlySnapshot } from "@/lib/netWorthSnapshot";
 
 type Row = {
   id: string;
@@ -12,12 +13,13 @@ type Row = {
   source: string;
   category: string;
   confidence: number | null;
+  is_one_off: boolean;
 };
 
 type RuleEditor = { rowId: string; pattern: string; saving: boolean };
 
 const money = (n: number) =>
-  (n < 0 ? "-" : "+") + "$" + Math.abs(n).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  (n < 0 ? "−" : "+") + "$" + Math.abs(n).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function guessPattern(description: string): string {
   return (description || "").split(/\s+/)[0]?.toLowerCase().replace(/[^a-z0-9]/g, "") || "";
@@ -28,9 +30,12 @@ export default function ReviewQueue() {
   const [resolved, setResolved] = useState<Record<string, string>>({});
   const [choice, setChoice] = useState<Record<string, string>>({});
   const [ruleEditor, setRuleEditor] = useState<RuleEditor | null>(null);
+  const [oneOffState, setOneOffState] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [snapMsg, setSnapMsg] = useState<string | null>(null);
+  const snapshotWritten = useRef(false);
   const patternInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -38,7 +43,7 @@ export default function ReviewQueue() {
       try {
         const { data, error } = await supabase
           .from("transactions")
-          .select("id,date,description,amount,source,category,confidence")
+          .select("id,date,description,amount,source,category,confidence,is_one_off")
           .or("category.eq.NEEDS_REVIEW,confidence.lt.0.8")
           .order("date", { ascending: false })
           .limit(1000);
@@ -62,7 +67,22 @@ export default function ReviewQueue() {
       .update({ category, confidence: 1, notes: "Reviewed in Review Queue." })
       .eq("id", id);
     if (error) { setErr(error.message); return; }
-    setResolved((r) => ({ ...r, [id]: category }));
+    setResolved((prev) => {
+      const next = { ...prev, [id]: category };
+      // If this resolves the last pending item, write a snapshot
+      const stillPending = rows.filter((r) => !next[r.id]);
+      if (stillPending.length === 0 && !snapshotWritten.current) {
+        snapshotWritten.current = true;
+        writeMonthlySnapshot().then((result) => {
+          if (result.written) {
+            setSnapMsg(result.isUpdate
+              ? "Queue clear — net worth snapshot updated for this month."
+              : "Queue clear — net worth snapshot written for this month.");
+          }
+        });
+      }
+      return next;
+    });
   }
 
   function openRuleEditor(row: Row) {
@@ -87,6 +107,16 @@ export default function ReviewQueue() {
     setMsg(`Rule saved: /${pattern}/i → ${category}. Auto-applies on future imports.`);
   }
 
+  async function toggleOneOff(row: Row) {
+    const next = !(oneOffState[row.id] ?? row.is_one_off);
+    const { error } = await supabase
+      .from("transactions")
+      .update({ is_one_off: next })
+      .eq("id", row.id);
+    if (error) { setErr(error.message); return; }
+    setOneOffState((s) => ({ ...s, [row.id]: next }));
+  }
+
   if (loading) return <div className="wrap"><div className="loading">Loading review queue…</div></div>;
   if (err) return <div className="wrap"><div className="err">{err}</div></div>;
 
@@ -95,8 +125,9 @@ export default function ReviewQueue() {
   return (
     <div className="wrap">
       <div className="header"><div className="logo">Review <span>Queue</span></div></div>
-      <p className="sub">{pending.length} transactions need a decision (uncategorised or low confidence). Set a category — and where it's a recurring merchant, save it as a rule so it never asks again.</p>
+      <p className="sub">{pending.length} transaction{pending.length === 1 ? "" : "s"} {pending.length === 1 ? "needs" : "need"} a decision — uncategorised or low confidence. Set the category, and for recurring merchants save a rule so it never comes up again.</p>
       {msg && <div className="card" style={{ background: "#d8efe3", color: "var(--green)", marginBottom: 14 }}>{msg}</div>}
+      {snapMsg && <div className="card" style={{ background: "#fffbf2", color: "var(--navy)", borderLeft: "3px solid var(--gold)", marginBottom: 14 }}>📸 {snapMsg}</div>}
 
       {pending.length === 0 ? (
         <div className="card" style={{ background: "#d8efe3", color: "var(--green)" }}>✓ All clear — nothing to review.</div>
@@ -128,8 +159,21 @@ export default function ReviewQueue() {
                           style={{ marginLeft: 12, color: editorOpen ? "var(--coral)" : "var(--gold)" }}
                           onClick={() => editorOpen ? setRuleEditor(null) : openRuleEditor(r)}
                         >
-                          {editorOpen ? "Cancel" : "+ rule"}
+                          {editorOpen ? "Cancel" : "+ Rule"}
                         </button>
+                        {(() => {
+                          const isOneOff = oneOffState[r.id] ?? r.is_one_off;
+                          return (
+                            <button
+                              className="link"
+                              title="Mark as a large one-off — surfaces on the Dashboard callout"
+                              style={{ marginLeft: 12, color: isOneOff ? "var(--coral)" : "var(--muted)", fontWeight: isOneOff ? 700 : 400 }}
+                              onClick={() => toggleOneOff(r)}
+                            >
+                              {isOneOff ? "★ one-off" : "☆ one-off"}
+                            </button>
+                          );
+                        })()}
                       </td>
                     </tr>
                     {editorOpen && (
@@ -177,9 +221,10 @@ export default function ReviewQueue() {
       )}
 
       <div className="foot">
-        Recategorising sets a row to high confidence. "+ rule" adds a merchant rule to the database (priority 50, above the
-        built-in rules) so the same merchant is auto-categorised on every future import — this is the loop that pushes
-        accuracy past 95% over time.
+        Saving a category sets that row to high confidence. <b>+ Rule</b> adds a merchant pattern rule to the database
+        (priority 50, above built-in rules) so the same merchant is auto-categorised on every future import — this is
+        the feedback loop that drives categorisation accuracy over time. <b>★ one-off</b> flags a transaction for the
+        Dashboard one-offs callout; unflag by clicking again.
       </div>
     </div>
   );

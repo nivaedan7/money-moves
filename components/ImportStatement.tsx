@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { parseStatement } from "@/lib/csv";
 import { categoriseWith, DbRule } from "@/lib/rules";
 import { CATEGORIES } from "@/lib/categories";
+import { writeMonthlySnapshot } from "@/lib/netWorthSnapshot";
 
 type Row = {
   date: string;
@@ -17,7 +18,7 @@ type Row = {
 };
 
 const money = (n: number) =>
-  (n < 0 ? "-" : "+") + "$" + Math.abs(n).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  (n < 0 ? "−" : "+") + "$" + Math.abs(n).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const confTier = (c: number) => (c >= 0.9 ? "high" : c >= 0.7 ? "med" : "low");
 
@@ -122,7 +123,24 @@ export default function ImportStatement() {
         const { error } = await supabase.from("transactions").insert(payload.slice(i, i + 500));
         if (error) throw error;
       }
-      setDone(`Saved ${fresh.length} transactions to the dashboard.` + (skipped > 0 ? ` Skipped ${skipped} already-imported duplicate${skipped === 1 ? "" : "s"}.` : ""));
+      // Write (or overwrite) this month's net worth snapshot
+      const closingBalance = rows.findLast((r) => r.balance != null)?.balance ?? null;
+      const snapResult = await writeMonthlySnapshot({
+        source: source as "cba" | "ing" | "bom",
+        closingBalance,
+      });
+
+      const snapNote = snapResult.written
+        ? snapResult.isUpdate
+          ? " Net worth snapshot updated."
+          : " Net worth snapshot written."
+        : "";
+
+      setDone(
+        `Saved ${fresh.length} transaction${fresh.length === 1 ? "" : "s"} to the dashboard.` +
+        (skipped > 0 ? ` Skipped ${skipped} already-imported duplicate${skipped === 1 ? "" : "s"}.` : "") +
+        snapNote
+      );
       setRows([]); setFilename(""); setSource("");
     } catch (e: any) {
       setErr(e?.message || "Save failed");
@@ -186,9 +204,10 @@ export default function ImportStatement() {
       )}
 
       <div className="foot">
-        Detection: ING by its <code>Credit,Debit</code> header; CBA by a leading date with no header. Amounts are stored
-        signed (negative = money out). Changing a category sets confidence to high. Saving writes an <code>import_batch</code>
-        and the transactions to Supabase — they appear on the Dashboard immediately.
+        Format detection is automatic: ING files are identified by their <code>Credit,Debit</code> header; CBA files by
+        a leading date column with no header row. Amounts are stored signed — negative for money out, positive for
+        money in. Adjusting a category here sets its confidence to high. Confirming writes an <code>import_batch</code>{" "}
+        record and all transactions to Supabase; they appear on the Dashboard immediately.
       </div>
     </div>
   );
