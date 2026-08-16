@@ -163,7 +163,7 @@ Behaviour:
 | Table | Rows |
 |---|---|
 | transactions | **2,247** |
-| merchant_rules | 58 |
+| merchant_rules | 70 |
 | budgets | 18 |
 | import_batches | 13 |
 | annual_commitments | 9 |
@@ -173,9 +173,9 @@ Behaviour:
 
 **By source:** `cba` 1,139 (Oct 2025 – May 2026) · `ing` 919 (Jan 2025 – Jun 2026) · `bom` 189 (May 2023 – May 2026).
 
-**Review queue: 110 transactions** currently flagged (`NEEDS_REVIEW` or confidence < 0.8), down from 171 after a July 2026 backlog pass. The remainder are almost all local Pty-Ltd merchants only Nivae recognises (Monki 3, Gema Group, Ebsons, Shop.Melbo, etc.) plus personal Osko/Splitwise settle-ups — these need his knowledge, which is what the grouped Review Queue UI is for.
+**Review queue: 46 transactions** currently flagged (`NEEDS_REVIEW` or confidence < 0.8), down from 171 after two July 2026 backlog passes. The remainder are personal money movement (Wise transfers, Osko/Splitwise settle-ups, Sportsbet) and payment-gateway/cryptic descriptors (Shop.Melbo\*, Mayur Sharma, Uptown Images, etc.) that need Nivae's own knowledge — which is what the grouped Review Queue UI is for.
 
-**Backlog pass (July 2026):** 61 flagged rows were bulk-categorised by re-running the static engine's knowledge over them (fees→Ignore, cashback→Home Utilities per Nivae's call, known chains→their category); those rows carry `notes = 'Bulk-categorised from review backlog (Part A).'`. Nine `merchant_rules` (rule_name `backlog_*`, priority 10) were added so those patterns never re-enter the queue. The Review Queue UI (`ReviewQueue.tsx`) now **groups flagged rows by normalised merchant** (`merchantKey` = letters-only, first 16 chars) with bulk "Apply to N" + "Save rule & apply" actions; singletons fall to an individual-transactions table below.
+**Backlog passes (July 2026):** two rounds cleared 125 rows. Round 1 (61 rows) re-ran the static engine's knowledge (fees→Ignore, cashback→Home Utilities per Nivae's call, known chains); tagged `notes = 'Bulk-categorised from review backlog (Part A).'`. Round 2 (64 rows) was an AI analysis of the local-merchant clusters (cafés/restaurants by their small repeat food amounts → Eating Out; salons/retail → Shopping); tagged `notes = 'Bulk-categorised from review backlog (AI analysis).'`. Both tags let you audit or bulk-undo. 21 `merchant_rules` (rule_name `backlog_*`, priority 10–20) were added so these patterns never re-enter the queue. **Note:** `Ebsons` was categorised Eating Out but is unconfirmed. The Review Queue UI (`ReviewQueue.tsx`) now **groups flagged rows by normalised merchant** (`merchantKey` = letters-only, first 16 chars) with bulk "Apply to N" + "Save rule & apply" actions; singletons fall to an individual-transactions table below.
 
 **One-offs flagged: 0.** The `is_one_off` mechanism is built and wired end-to-end but Nivae hasn't tagged anything yet, so the Dashboard callout band is hidden. This is expected, not a bug.
 
@@ -231,7 +231,7 @@ Also note the **13-month gap** between the 2025 snapshot and the 2026 ones. Grow
 
 ## 11. Known issues & tech debt (priority order)
 
-1. **110 transactions in the review queue.** Now mostly local merchants Nivae must identify. Use the grouped Review Queue UI: set a category for a whole merchant group and hit "Save rule & apply" so it never recurs. Each rule compounds — it prevents future flags.
+1. **46 transactions in the review queue.** Now personal money movement + cryptic payment-gateway descriptors Nivae must identify. Use the grouped Review Queue UI: set a category for a whole merchant group and hit "Save rule & apply" so it never recurs. Each rule compounds — it prevents future flags.
 2. **`money()` is duplicated across 8 components** with three different variants (2dp signed, 2dp unsigned, 0dp). Should be one `lib/format.ts` exporting `money`, `moneyRound`, `moneySigned`. Low risk, touches many files.
 3. **Snapshot account-matching is heuristic.** The ING `>$50k` / `<$10k` balance thresholds in `netWorthSnapshot.ts` are brittle — they'll misfire if the Everyday account is drawn down below $50k. A proper fix is an `account_id` on import batches, or matching against `bank_accounts.display_name`.
 4. **Meera's DOB lives in localStorage**, so it's re-entered per browser and lost on clearing site data. Should move to a settings table or a `households` row.

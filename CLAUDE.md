@@ -49,7 +49,7 @@ Project ref **`weoaakhlcllcjfzupjsj`**. Tables: `transactions` (signed `amount`,
 
 Category taxonomy is **clean** — all 2,247 rows use the canonical 21 labels. Do not re-fix the legacy-label issue described in older docs; it's resolved.
 
-Top outstanding chore: **110 transactions in the review queue** (down from 171 after a July 2026 backlog pass; the rest are local merchants only Nivae recognises). The Review Queue UI groups flagged rows by merchant with bulk "Apply to N" + "Save rule & apply" actions. Biggest code debt: `money()` duplicated across 8 components.
+Top outstanding chore: **46 transactions in the review queue** (down from 171 after two July 2026 backlog passes; the rest are personal transfers + cryptic gateway descriptors only Nivae recognises). The Review Queue UI groups flagged rows by merchant with bulk "Apply to N" + "Save rule & apply" actions. Biggest code debt: `money()` duplicated across 8 components.
 
 ## Needs the user's approval
 
