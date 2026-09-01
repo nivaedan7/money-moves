@@ -78,33 +78,14 @@ export default function ImportStatement() {
       const start = dates[0];
       const end = dates[dates.length - 1];
 
-      // Soft dedupe: skip rows already present for this account over the same date range.
-      const composite = (d: string, a: number, desc: string, bal: number | null) =>
-        `${d}|${a}|${desc}|${bal ?? ""}`;
-      const { data: existing } = await supabase
-        .from("transactions")
-        .select("date,amount,description,balance")
-        .eq("source", source)
-        .gte("date", start)
-        .lte("date", end);
-      const seen = new Set((existing || []).map((e: any) => composite(e.date, Number(e.amount), e.description || "", e.balance)));
-      const fresh = rows.filter((r) => !seen.has(composite(r.date, r.amount, r.description, r.balance)));
-      const skipped = rows.length - fresh.length;
-
-      if (fresh.length === 0) {
-        setDone(`Nothing new — all ${rows.length} transactions are already imported.`);
-        setRows([]); setFilename(""); setSource(""); setSaving(false);
-        return;
-      }
-
       const { data: batch, error: be } = await supabase
         .from("import_batches")
-        .insert({ source, filename, transaction_count: fresh.length, date_range_start: start, date_range_end: end })
+        .insert({ source, filename, transaction_count: rows.length, date_range_start: start, date_range_end: end })
         .select("id")
         .single();
       if (be) throw be;
 
-      const payload = fresh.map((r) => ({
+      const payload = rows.map((r) => ({
         date: r.date,
         description: r.description.slice(0, 200),
         raw_description: r.description.slice(0, 300),
@@ -118,11 +99,26 @@ export default function ImportStatement() {
         notes: r.rule === "manual" ? "Manually categorised on import." : null,
       }));
 
-      // insert in chunks of 500
+      // Upsert in chunks of 500. The dedup_key trigger + unique index drop any
+      // row already imported (same file re-uploaded, or the same transaction in
+      // a different statement format), so re-imports insert nothing.
+      let inserted = 0;
       for (let i = 0; i < payload.length; i += 500) {
-        const { error } = await supabase.from("transactions").insert(payload.slice(i, i + 500));
+        const { data, error } = await supabase
+          .from("transactions")
+          .upsert(payload.slice(i, i + 500), { onConflict: "dedup_key", ignoreDuplicates: true })
+          .select("id");
         if (error) throw error;
+        inserted += data?.length ?? 0;
       }
+      const skipped = rows.length - inserted;
+
+      if (inserted === 0) {
+        setDone(`Nothing new — all ${rows.length} transaction${rows.length === 1 ? "" : "s"} were already imported.`);
+        setRows([]); setFilename(""); setSource(""); setSaving(false);
+        return;
+      }
+
       // Write (or overwrite) this month's net worth snapshot
       const closingBalance = rows.findLast((r) => r.balance != null)?.balance ?? null;
       const snapResult = await writeMonthlySnapshot({
@@ -137,7 +133,7 @@ export default function ImportStatement() {
         : "";
 
       setDone(
-        `Saved ${fresh.length} transaction${fresh.length === 1 ? "" : "s"} to the dashboard.` +
+        `Saved ${inserted} transaction${inserted === 1 ? "" : "s"} to the dashboard.` +
         (skipped > 0 ? ` Skipped ${skipped} already-imported duplicate${skipped === 1 ? "" : "s"}.` : "") +
         snapNote
       );
