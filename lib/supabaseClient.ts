@@ -1,10 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Supabase publishable key is safe to ship to the browser — data is protected by
-// Row Level Security + the auth gate. Env vars win if set (local dev / Vercel),
-// otherwise fall back to the project defaults so production builds always work.
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://weoaakhlcllcjfzupjsj.supabase.co";
-const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "sb_publishable_lfKI1pU8RKJSVOxRo3hv0g_CDON3CSX";
+// The Supabase URL + publishable key are read from the environment. They are
+// required — no hardcoded fallback ships in the bundle. Set both in .env.local
+// (local) and the Vercel project (production); a missing var fails the build
+// loudly rather than silently shipping a literal key.
+const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+if (!url || !key) {
+  throw new Error(
+    "Missing NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY — set both in .env.local and the Vercel project."
+  );
+}
 
 export const supabase = createClient(url, key);
 
