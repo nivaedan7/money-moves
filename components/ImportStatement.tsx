@@ -22,6 +22,8 @@ const money = (n: number) =>
 
 const confTier = (c: number) => (c >= 0.9 ? "high" : c >= 0.7 ? "med" : "low");
 
+const SOURCE_LABEL: Record<string, string> = { cba: "CBA", ing: "ING", bom: "Bank of Melbourne" };
+
 export default function ImportStatement() {
   const [filename, setFilename] = useState("");
   const [source, setSource] = useState<"cba" | "ing" | "bom" | "">("");
@@ -51,7 +53,7 @@ export default function ImportStatement() {
       return;
     }
     if (parsed.rows.length === 0) {
-      setErr(`No transactions found in this ${parsed.source.toUpperCase()} file.`);
+      setErr(`No transactions found in this ${SOURCE_LABEL[parsed.source] || parsed.source} file.`);
       setFilename("");
       return;
     }
@@ -89,17 +91,6 @@ export default function ImportStatement() {
   async function confirmSave() {
     setSaving(true); setErr(null);
     try {
-      const dates = rows.map((r) => r.date).sort();
-      const start = dates[0];
-      const end = dates[dates.length - 1];
-
-      const { data: batch, error: be } = await supabase
-        .from("import_batches")
-        .insert({ source, filename, transaction_count: rows.length, date_range_start: start, date_range_end: end })
-        .select("id")
-        .single();
-      if (be) throw be;
-
       const payload = rows.map((r) => ({
         date: r.date,
         description: r.description.slice(0, 200),
@@ -108,25 +99,21 @@ export default function ImportStatement() {
         balance: r.balance,
         category: r.category,
         confidence: r.confidence,
-        source,
-        import_id: batch!.id,
-        is_annual_commitment: false,
         notes: r.rule === "manual" ? "Manually categorised on import." : null,
       }));
 
-      // Upsert in chunks of 500. The dedup_key trigger + unique index drop any
-      // row already imported (same file re-uploaded, or the same transaction in
-      // a different statement format), so re-imports insert nothing.
-      let inserted = 0;
-      for (let i = 0; i < payload.length; i += 500) {
-        const { data, error } = await supabase
-          .from("transactions")
-          .upsert(payload.slice(i, i + 500), { onConflict: "dedup_key", ignoreDuplicates: true })
-          .select("id");
-        if (error) throw error;
-        inserted += data?.length ?? 0;
-      }
-      const skipped = rows.length - inserted;
+      // One atomic call: the batch and its transactions either all land or none
+      // do. The dedup_key unique index drops rows already imported (same file, or
+      // the same transaction in a different statement format).
+      const { data, error } = await supabase.rpc("import_statement", {
+        p_source: source,
+        p_filename: filename,
+        p_rows: payload,
+      });
+      if (error) throw error;
+
+      const inserted: number = data?.inserted ?? 0;
+      const skipped: number = data?.skipped ?? 0;
 
       if (inserted === 0) {
         setDone(`Nothing new — all ${rows.length} transaction${rows.length === 1 ? "" : "s"} were already imported.`);
@@ -145,7 +132,9 @@ export default function ImportStatement() {
         ? snapResult.isUpdate
           ? " Net worth snapshot updated."
           : " Net worth snapshot written."
-        : "";
+        : snapResult.reason
+          ? ` Net worth snapshot could not be written: ${snapResult.reason}.`
+          : "";
 
       setDone(
         `Saved ${inserted} transaction${inserted === 1 ? "" : "s"} to the dashboard.` +
@@ -154,7 +143,14 @@ export default function ImportStatement() {
       );
       setRows([]); setFilename(""); setSource("");
     } catch (e: any) {
-      setErr(e?.message || "Save failed");
+      const msg: string = e?.message || "";
+      if (/duplicate key|already exists|uq_tx_dedup/i.test(msg)) {
+        setErr("Everything in this file was already imported. Nothing was saved.");
+      } else if (/network|fetch|timeout|failed to fetch|connection/i.test(msg)) {
+        setErr("Couldn't reach the database. Nothing was saved — try again.");
+      } else {
+        setErr(`Import failed: ${msg || "unknown error"}. Nothing was saved.`);
+      }
     } finally {
       setSaving(false);
     }
@@ -179,7 +175,7 @@ export default function ImportStatement() {
       {rows.length > 0 && (
         <>
           <div className="toolbar">
-            <span className="pill high">{source.toUpperCase()}</span>
+            <span className="pill high">{SOURCE_LABEL[source] || source.toUpperCase()}</span>
             <span style={{ fontSize: 13, color: "var(--muted)" }}>{filename}</span>
             <span style={{ fontSize: 13 }}>· {stats.count} txns · spend {money(-stats.spend)} · in {money(stats.income)} · <b>{stats.flagged} flagged</b></span>
             <label style={{ fontSize: 13, marginLeft: "auto" }}><input type="checkbox" checked={flaggedOnly} onChange={(e) => setFlaggedOnly(e.target.checked)} /> Flagged only</label>
