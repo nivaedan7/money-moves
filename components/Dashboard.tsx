@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import MonthStatus from "./MonthStatus";
 import { supabase, Transaction, Budget } from "@/lib/supabaseClient";
 
 const BEHAVIOURAL = ["Groceries", "Eating Out", "Tolls", "Home Utilities"];
@@ -264,8 +265,9 @@ export default function Dashboard() {
         const bm: Record<string, number> = {};
         (b.data as Budget[]).forEach((x) => (bm[x.category] = Number(x.monthly_amount)));
         setBudgets(bm);
-        const months = Array.from(new Set(tx.map((t) => t.date.slice(0, 7)))).sort();
-        setMonth(months[months.length - 1] || "");
+        // Always open on the current calendar month, so a missing month reads as
+        // a gap rather than silently showing the last month that had data.
+        setMonth(new Date().toISOString().slice(0, 7));
       } catch (e: any) {
         setErr(e?.message || "Failed to load data");
       } finally {
@@ -274,9 +276,11 @@ export default function Dashboard() {
     })();
   }, []);
 
+  // Last 24 calendar months, newest first — regardless of data — so a month
+  // that was never imported still appears in the dropdown as a gap.
   const months = useMemo(
-    () => Array.from(new Set(txns.map((t) => t.date.slice(0, 7)))).sort().reverse(),
-    [txns]
+    () => trailingMonthKeys(new Date().toISOString().slice(0, 7), 24).slice().reverse(),
+    []
   );
 
   const monthTxns = useMemo(() => txns.filter((t) => t.date.slice(0, 7) === month), [txns, month]);
@@ -371,6 +375,31 @@ export default function Dashboard() {
 
   const fixedThisMonth = fixedCatsActive.reduce((s, c) => s + spendForCat(c), 0);
 
+  const monthPicker = (
+    <div className="controls">
+      <label htmlFor="m" style={{ fontSize: 13, color: "var(--muted)", fontWeight: 600 }}>Month</label>
+      <select id="m" value={month} onChange={(e) => { setMonth(e.target.value); setExpandedCat(null); }}>
+        {months.map((m) => (
+          <option key={m} value={m}>{monthLabel(m)}</option>
+        ))}
+      </select>
+      <span style={{ fontSize: 12.5, color: "var(--muted)" }}>{monthTxns.length} transactions</span>
+    </div>
+  );
+
+  // A month with no data shows the status band and nothing else — no empty
+  // stat cards or table implying "$0 spent" when the truth is "not imported".
+  if (monthTxns.length === 0) {
+    return (
+      <div className="wrap">
+        <div className="header"><div className="logo">$<span>MM</span> Money Moves</div></div>
+        <p className="sub">Household finance for Nivae &amp; Diya — low-friction monthly review.</p>
+        {monthPicker}
+        <MonthStatus month={month} />
+      </div>
+    );
+  }
+
   return (
     <div className="wrap">
       <div className="header">
@@ -378,15 +407,9 @@ export default function Dashboard() {
       </div>
       <p className="sub">Household finance for Nivae &amp; Diya — low-friction monthly review.</p>
 
-      <div className="controls">
-        <label htmlFor="m" style={{ fontSize: 13, color: "var(--muted)", fontWeight: 600 }}>Month</label>
-        <select id="m" value={month} onChange={(e) => { setMonth(e.target.value); setExpandedCat(null); }}>
-          {months.map((m) => (
-            <option key={m} value={m}>{monthLabel(m)}</option>
-          ))}
-        </select>
-        <span style={{ fontSize: 12.5, color: "var(--muted)" }}>{monthTxns.length} transactions</span>
-      </div>
+      {monthPicker}
+
+      <MonthStatus month={month} />
 
       {/* Stat cards */}
       <div className="grid stats">
