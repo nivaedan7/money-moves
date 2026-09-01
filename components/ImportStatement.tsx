@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { parseStatement } from "@/lib/csv";
+import { parseStatement, UnrecognisedStatement } from "@/lib/csv";
 import { categoriseWith, DbRule } from "@/lib/rules";
 import { CATEGORIES } from "@/lib/categories";
 import { writeMonthlySnapshot } from "@/lib/netWorthSnapshot";
@@ -24,7 +24,7 @@ const confTier = (c: number) => (c >= 0.9 ? "high" : c >= 0.7 ? "med" : "low");
 
 export default function ImportStatement() {
   const [filename, setFilename] = useState("");
-  const [source, setSource] = useState<"cba" | "ing" | "">("");
+  const [source, setSource] = useState<"cba" | "ing" | "bom" | "">("");
   const [rows, setRows] = useState<Row[]>([]);
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [hideIgnored, setHideIgnored] = useState(false);
@@ -38,8 +38,23 @@ export default function ImportStatement() {
     if (!file) return;
     setFilename(file.name);
     const text = await file.text();
-    const parsed = parseStatement(text);
-    if (parsed.rows.length === 0) { setErr("No transactions found. Is this a CBA or ING CSV?"); return; }
+    let parsed;
+    try {
+      parsed = parseStatement(text);
+    } catch (e) {
+      if (e instanceof UnrecognisedStatement) {
+        setErr(`${e.message} First line seen: "${e.firstLine}". Expected one of — ${e.tried.join("; ")}.`);
+      } else {
+        setErr((e as any)?.message || "Could not read this file.");
+      }
+      setFilename("");
+      return;
+    }
+    if (parsed.rows.length === 0) {
+      setErr(`No transactions found in this ${parsed.source.toUpperCase()} file.`);
+      setFilename("");
+      return;
+    }
     setSource(parsed.source);
     // Load DB-backed merchant rules (ignore-first via priority), fall back to static rules.
     const { data: ruleRows } = await supabase
@@ -148,13 +163,13 @@ export default function ImportStatement() {
   return (
     <div className="wrap">
       <div className="header"><div className="logo">Import <span>Statement</span></div></div>
-      <p className="sub">Upload a CBA or ING CSV. The rule engine categorises known merchants instantly; review the flagged ones, then save.</p>
+      <p className="sub">Upload a CBA, ING or Bank of Melbourne CSV. The rule engine categorises known merchants instantly; review the flagged ones, then save.</p>
 
       {rows.length === 0 && (
         <label className="dropzone" style={{ display: "block", cursor: "pointer" }}>
           <input type="file" accept=".csv,text/csv" onChange={onFile} style={{ display: "none" }} />
           <div style={{ fontSize: 16, fontWeight: 700, color: "var(--navy)" }}>Choose a CSV file</div>
-          <div style={{ marginTop: 6 }}>CBA (no header) or ING (Date,Description,Credit,Debit,Balance) — auto-detected.</div>
+          <div style={{ marginTop: 6 }}>CBA, ING or Bank of Melbourne CSV — the format is auto-detected.</div>
         </label>
       )}
 
@@ -200,8 +215,10 @@ export default function ImportStatement() {
       )}
 
       <div className="foot">
-        Format detection is automatic: ING files are identified by their <code>Credit,Debit</code> header; CBA files by
-        a leading date column with no header row. Amounts are stored signed — negative for money out, positive for
+        Format detection is automatic: ING and Bank of Melbourne files are told apart by their column order
+        (<code>Credit,Debit</code> vs <code>Debit,Credit</code>); CBA files by a leading date column with no header
+        row. A file that matches nothing, or that parses to mostly $0, is rejected with the line it saw. Amounts are
+        stored signed — negative for money out, positive for
         money in. Adjusting a category here sets its confidence to high. Confirming writes an <code>import_batch</code>{" "}
         record and all transactions to Supabase; they appear on the Dashboard immediately.
       </div>
