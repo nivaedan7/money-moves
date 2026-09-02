@@ -150,14 +150,47 @@ export default function ReviewQueue() {
     if (!ruleEditor || !ruleEditor.pattern.trim()) return;
     if (!category || category === "NEEDS_REVIEW") { setErr("Pick a real category first."); return; }
     const pattern = ruleEditor.pattern.trim();
+    if (pattern.length < 4) { setErr("That pattern is too short (4+ characters) — it would match too much."); return; }
     setRuleEditor((r) => r && ({ ...r, saving: true }));
-    const { error } = await supabase.from("merchant_rules").insert({
-      pattern, category, confidence: 0.95, rule_name: "review_" + Date.now(), priority: 50,
-    });
-    if (error) { setErr(error.message); setRuleEditor((r) => r && ({ ...r, saving: false })); return; }
+    const stopSaving = () => setRuleEditor((r) => r && ({ ...r, saving: false }));
+
+    // Does a rule for this exact pattern already exist?
+    const { data: existing, error: exErr } = await supabase
+      .from("merchant_rules").select("category").eq("pattern", pattern).limit(1);
+    if (exErr) { setErr(exErr.message); stopSaving(); return; }
+    const already = existing?.[0] as { category: string } | undefined;
+
+    if (already && already.category !== category) {
+      setErr(`A rule for /${pattern}/i already maps to "${already.category}". Delete that rule first, or use a different pattern.`);
+      stopSaving(); return;
+    }
+
+    if (!already) {
+      // Refuse an over-broad pattern (would swallow unrelated merchants).
+      try {
+        const [totalRes, matchRes] = await Promise.all([
+          supabase.from("transactions").select("id", { count: "exact", head: true }),
+          supabase.from("transactions").select("id", { count: "exact", head: true }).filter("description", "imatch", pattern),
+        ]);
+        const total = totalRes.count || 0;
+        const matched = matchRes.count || 0;
+        if (total > 0 && matched / total > 0.05) {
+          setErr(`That pattern matches ${matched} of ${total} transactions — too broad. Use something more specific.`);
+          stopSaving(); return;
+        }
+      } catch { /* if the broadness check itself fails, don't block the save */ }
+
+      const { error } = await supabase.from("merchant_rules").insert({
+        pattern, category, confidence: 0.95, rule_name: "review_" + Date.now(), priority: 50,
+      });
+      if (error) { setErr(error.message); stopSaving(); return; }
+    }
+
     setRuleEditor(null);
     await applyCategory(g.rows.map((r) => r.id), category, g.key);
-    setMsg(`Rule /${pattern}/i → ${category}, applied to ${g.rows.length}. Future imports auto-match.`);
+    setMsg(already
+      ? `Rule /${pattern}/i already existed — applied ${category} to ${g.rows.length}.`
+      : `Rule /${pattern}/i → ${category}, applied to ${g.rows.length}. Future imports auto-match.`);
   }
 
   async function toggleOneOff(row: Row) {

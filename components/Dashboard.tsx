@@ -298,7 +298,7 @@ export default function Dashboard() {
   const monthlySpend = useMemo(() => {
     const result: Record<string, Record<string, number>> = {};
     for (const t of txns) {
-      if (t.category === "Ignore" || t.category === "Income") continue;
+      if (t.category === "Ignore" || t.category === "Income" || t.category === "Big One-Offs") continue;
       if (t.amount >= 0) continue; // skip inflows for spend history
       const mo = t.date.slice(0, 7);
       if (!result[t.category]) result[t.category] = {};
@@ -336,8 +336,10 @@ export default function Dashboard() {
     () => monthTxns.filter((t) => t.category === "Income").reduce((s, t) => s + t.amount, 0),
     [monthTxns]
   );
+  // Headline spend excludes Big One-Offs — a $72k car purchase isn't behavioural
+  // spend and shouldn't swamp the month. One-offs surface in their own callout.
   const spend = useMemo(
-    () => -monthTxns.filter((t) => t.category !== "Income" && t.category !== "Ignore").reduce((s, t) => s + t.amount, 0),
+    () => -monthTxns.filter((t) => t.category !== "Income" && t.category !== "Ignore" && t.category !== "Big One-Offs").reduce((s, t) => s + t.amount, 0),
     [monthTxns]
   );
   const net = income - spend;

@@ -49,6 +49,25 @@ export type CatResult = { category: string; confidence: number; rule: string | n
 
 export type DbRule = { pattern: string; category: string; confidence: number; rule_name: string | null; priority: number };
 
+// Amount sanity check: a transaction far outside its category's normal range is
+// probably mis-matched (e.g. a $72k car purchase that a rule sent to Rent /
+// Mortgage). Downgrade its confidence below the review threshold so a human
+// looks — never override the category. Thresholds reflect what each category
+// legitimately reaches; discretionary categories are capped low.
+function amountThreshold(category: string): number {
+  switch (category) {
+    case "Rent / Mortgage": return 15000;
+    case "Investment Property Costs": return 20000;
+    case "Income": return 40000;
+    case "Ignore": return 60000;
+    case "Big One-Offs": return Infinity;
+    default: return 5000;
+  }
+}
+function sanityConfidence(category: string, amount: number, conf: number): number {
+  return Math.abs(amount) > amountThreshold(category) ? Math.min(conf, 0.5) : conf;
+}
+
 // Apply DB-backed merchant rules first (sorted by priority by the caller), then
 // fall back to the built-in static rules. This is how MoneyMoves gets smarter
 // each month: approved rules from the Review Queue land in the DB and win.
@@ -57,7 +76,7 @@ export function categoriseWith(dbRules: DbRule[], description: string, amount: n
   for (const r of dbRules) {
     try {
       if (new RegExp(r.pattern, "i").test(d)) {
-        return { category: r.category, confidence: Number(r.confidence), rule: r.rule_name };
+        return { category: r.category, confidence: sanityConfidence(r.category, amount, Number(r.confidence)), rule: r.rule_name };
       }
     } catch {
       /* ignore a malformed pattern and continue */
@@ -72,7 +91,7 @@ export function categorise(description: string, amount: number, _source: string)
     if (r.re.test(d)) {
       // A positive amount on an Income rule stays income; a positive amount that
       // matched an expense merchant is most likely a refund — keep the category.
-      return { category: r.category, confidence: r.conf, rule: r.name };
+      return { category: r.category, confidence: sanityConfidence(r.category, amount, r.conf), rule: r.name };
     }
   }
   // Credits with no rule are most likely income/refunds; flag for review either way.
