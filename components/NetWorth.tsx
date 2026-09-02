@@ -216,7 +216,7 @@ export default function NetWorth() {
   return (
     <div className="wrap">
       <div className="header"><div className="logo">Net <span>Worth</span></div></div>
-      <p className="sub">Snapshot as at {latest.snapshot_date}. Superannuation is shown separately and is not included in the net worth total.</p>
+      <p className="sub">Snapshot as at {latest.snapshot_date}. Account balances carry forward from the previous snapshot except where a fresh statement updated them. Superannuation is shown separately and is not included in the net worth total.</p>
 
       {ageDays > 60 && (
         <div className="card stale" style={{ marginBottom: 18 }}>

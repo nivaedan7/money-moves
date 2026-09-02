@@ -28,16 +28,20 @@ export async function writeMonthlySnapshot(opts?: {
   source?: "cba" | "ing" | "bom";
   closingBalance?: number | null;
 }): Promise<SnapshotResult> {
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  const monthStart = today.slice(0, 7) + "-01";        // YYYY-MM-01
-  const monthEnd   = today.slice(0, 7) + "-31";        // YYYY-MM-31 (safe upper bound)
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10); // YYYY-MM-DD
+  // Proper calendar-month window [monthStart, nextMonth). The old "YYYY-MM-31"
+  // upper bound was an invalid date in Feb/Apr/Jun/Sep/Nov and silently failed
+  // the snapshot query in those five months.
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10);
+  const nextMonth  = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
 
   // 1. Check for existing snapshot this month
   const { data: existing, error: existErr } = await supabase
     .from("net_worth_snapshots")
     .select("id,snapshot_date,assets,debts,meera_fund")
     .gte("snapshot_date", monthStart)
-    .lte("snapshot_date", monthEnd)
+    .lt("snapshot_date", nextMonth)
     .order("snapshot_date", { ascending: false })
     .limit(1);
   if (existErr) return { written: false, reason: existErr.message };

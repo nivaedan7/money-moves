@@ -71,8 +71,10 @@ function computeGrowth(snaps: Snap[]): GrowthData {
     return { valid: false, reason: "Need at least 2 snapshots with data.", snapCount: valid.length };
   }
 
-  // Compute per-interval growth rates (normalised to monthly)
-  const rates: number[] = [];
+  // Per-interval monthly-equivalent growth, keeping only intervals >= 60 days.
+  // A short window (e.g. an 11-day gap) wildly over/under-states the annual rate
+  // — that is exactly what made Outlook project -5.5%/yr off an 11-day interval.
+  const intervals: { rate: number; days: number }[] = [];
   for (let i = 1; i < valid.length; i++) {
     const prev = valid[i - 1];
     const curr = valid[i];
@@ -81,34 +83,26 @@ function computeGrowth(snaps: Snap[]): GrowthData {
     if (a1 <= 0) continue;
     const days =
       (new Date(curr.snapshot_date).getTime() - new Date(prev.snapshot_date).getTime()) / 86_400_000;
-    if (days < 1) continue;
-    // Monthly-equivalent growth: (a2/a1)^(30/days) - 1
-    const monthlyRate = Math.pow(a2 / a1, 30 / days) - 1;
-    rates.push(monthlyRate);
+    if (days < 60) continue;
+    intervals.push({ rate: Math.pow(a2 / a1, 30 / days) - 1, days });
   }
 
-  if (rates.length === 0) {
-    return { valid: false, reason: "Could not compute growth between snapshots.", snapCount: valid.length };
-  }
-
-  // Use up to the trailing 3 intervals (trailing 3-month average)
-  const trailing = rates.slice(-3);
-  const avg = trailing.reduce((s, r) => s + r, 0) / trailing.length;
-
-  if (trailing.length < 3) {
-    // We have some data but not a full 3-month window — still show but warn
+  if (intervals.length < 2) {
     return {
-      valid: true,
-      monthlyRate: avg,
-      intervals: trailing.length,
-      currentAssets: coreAssetTotal(valid[valid.length - 1]),
-      snapUsed: valid,
+      valid: false,
+      reason: "Need at least two snapshots 60+ days apart to project a trend.",
+      snapCount: valid.length,
     };
   }
 
+  // Trailing 3 qualifying intervals, weighted by their length in days.
+  const trailing = intervals.slice(-3);
+  const totalDays = trailing.reduce((s, x) => s + x.days, 0);
+  const monthlyRate = trailing.reduce((s, x) => s + x.rate * x.days, 0) / totalDays;
+
   return {
     valid: true,
-    monthlyRate: avg,
+    monthlyRate,
     intervals: trailing.length,
     currentAssets: coreAssetTotal(valid[valid.length - 1]),
     snapUsed: valid,
