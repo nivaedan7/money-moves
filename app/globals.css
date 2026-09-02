@@ -18,7 +18,11 @@ body {
   color: var(--ink);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden; /* a stray wide element can never scroll the whole page */
 }
+
+/* Wide content (tables) scrolls inside its own container, not the page. */
+.tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
 
 .nav { background: var(--navy); }
 .nav-inner { max-width: 1080px; margin: 0 auto; padding: 12px 20px; display: flex; align-items: center; gap: 18px; }
@@ -96,3 +100,21 @@ tr:last-child td { border-bottom: none; }
 .loading, .err { padding: 60px 0; text-align: center; color: var(--muted); }
 .err { color: var(--coral); }
 .foot { margin-top: 36px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+
+/* ── Phone (the primary device for the monthly review) ─────────────────────── */
+@media (max-width: 640px) {
+  .nav-inner { flex-wrap: wrap; gap: 10px 14px; padding: 10px 14px; }
+  .nav a { font-size: 13px; padding: 6px 0; }
+  .wrap { padding: 20px 14px 64px; }
+  .logo { font-size: 24px; }
+  .controls { flex-wrap: wrap; }
+  .stats, .beh { grid-template-columns: 1fr 1fr; }
+  /* Any table wider than the screen scrolls inside its card rather than pushing
+     the page sideways. Most tables in the app live directly inside a .card. */
+  .card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  th, td { padding: 9px 10px; }
+  /* Touch targets: real controls are at least 44px tall. */
+  .btn, select, .sel-cat, .inp { min-height: 44px; }
+  /* Category pickers go full width so they're easy to tap in review/import. */
+  .sel-cat { width: 100%; }
+}
