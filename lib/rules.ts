@@ -26,9 +26,11 @@ const R: Rule[] = [
   // ---- GIVING ----
   { re: /effective ?alt|\bace\b|st ?john ?ambul|red ?cross|oxfam/i, category: "Giving", conf: 0.7, name: "giving" },
   // ---- FUEL & CAR ----
-  { re: /reddy ?express|coles ?express|\bshell\b|7-?eleven|\bbp\b|ampol|caltex|vicroads|autoservice|ask ?auto|\bmyki\b|parking|linkt ?rego/i, category: "Fuel & Car", conf: 0.85, name: "fuel_car" },
-  // ---- TOLLS ----
-  { re: /\blinkt\b|eastlink|citylink/i, category: "Tolls", conf: 0.95, name: "tolls" },
+  { re: /reddy ?express|coles ?express|\bshell\b|7-?eleven|\bbp\b|ampol|caltex|vicroads|autoservice|ask ?auto|\bmyki\b|parking|linkt ?rego/i, category: "Transport", conf: 0.85, name: "fuel_car" },
+  // ---- TRANSPORT (tolls) ----
+  { re: /\blinkt\b|eastlink|citylink/i, category: "Transport", conf: 0.95, name: "tolls" },
+  // ---- PERSONAL CARE (hair / beauty / grooming) ----
+  { re: /rokk ?ebony|house ?of ?beauty|colour ?haus|streax|beauty ?& ?brow|keratin|makhani|hair ?dress|\bbarber\b|\bsalon\b/i, category: "Personal Care", conf: 0.9, name: "personal_care" },
   // ---- INVESTMENT PROPERTY ----
   { re: /state revenue office|land tax|maroondah|kingston city council|yarra valley w(a)?t(er)?/i, category: "Investment Property Costs", conf: 0.85, name: "inv_property" },
   // ---- HOME UTILITIES ----

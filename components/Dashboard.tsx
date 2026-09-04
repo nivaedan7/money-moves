@@ -4,12 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import MonthStatus from "./MonthStatus";
 import { supabase, Transaction, Budget } from "@/lib/supabaseClient";
 
-const BEHAVIOURAL = ["Groceries", "Eating Out", "Tolls", "Home Utilities"];
+const BEHAVIOURAL = ["Groceries", "Eating Out", "Shopping"];
 
 // Categories where spending more is structurally neutral (fixed costs, not habits)
 const FIXED_CATS = new Set([
-  "Rent / Mortgage", "Insurance", "Giving", "Investment Property Costs",
-  "Work Expenses", "Meera Childcare", "Subscriptions",
+  "Rent / Mortgage", "Home Utilities", "Insurance", "Giving",
+  "Investment Property Costs", "Work Expenses", "Meera Childcare", "Subscriptions",
 ]);
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];

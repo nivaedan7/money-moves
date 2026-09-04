@@ -1,22 +1,27 @@
 export const CATEGORIES = [
+  // Behavioural — pinned on the Dashboard (the levers you actually move)
   "Groceries",
   "Eating Out",
-  "Tolls",
+  "Shopping",
+  // Discretionary / tracked
+  "Personal Care",
+  "Sports & Fitness",
+  "Meera Activities",
+  "Health",
+  "Transport",
+  "Travel",
+  "Giving",
+  "Work Expenses",
+  // Fixed / structural
   "Home Utilities",
   "Rent / Mortgage",
   "Insurance",
   "Subscriptions",
-  "Giving",
-  "Meera Childcare",
-  "Meera Activities",
-  "Health",
-  "Sports & Fitness",
-  "Shopping",
-  "Fuel & Car",
-  "Work Expenses",
   "Investment Property Costs",
-  "Travel",
+  "Meera Childcare",
+  // Exceptional
   "Big One-Offs",
+  // System
   "Income",
   "Ignore",
   "NEEDS_REVIEW",
